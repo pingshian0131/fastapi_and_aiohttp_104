@@ -1,4 +1,5 @@
 import asyncio
+import random
 import time
 import aiohttp
 from pydantic import BaseModel, Field
@@ -7,13 +8,15 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 import requests
 from bs4 import BeautifulSoup
+import pandas as pd
 
 app = FastAPI()
 
 def parse_html(html):
     soup = BeautifulSoup(html, "html.parser")
-    title = soup.find("title").text
-    content = soup.find("meta", {"property": "og:description"}).get("content")
+    print(soup)
+    title = soup.find("h1").text
+    content = soup.find("p", class_="mb-5 r3 job-description__content text-break")
     return {"title": title, "content": content}
 
 async def aiohttp_fetch(client, link):
@@ -39,7 +42,7 @@ class Job(BaseModel):
 url = "https://www.104.com.tw/jobs/search/?ro=0&keyword=django&expansionType=area%2Cspec%2Ccom%2Cjob%2Cwf%2Cwktm&order=14&asc=0&page=1&mode=s&jobsource=2018indexpoc&langFlag=0&langStatus=0&recommendJob=1&hotJob=1"
 prefix = "https:"
 
-@app.get("/api/104/django/1/")
+@app.get("/async/api/104/django/1/")
 async def get_django_job():
     start_time = time.time()
     print(f"---------- start_time: {start_time}s ----------")
@@ -48,6 +51,7 @@ async def get_django_job():
     soup = BeautifulSoup(r.text, "html.parser")
     links_ele = soup.find_all("a", {"class": "js-job-link"}, href=True)
     links = [prefix + ele["href"] for i, ele in enumerate(links_ele)]
+    print(links)
 
     # start parse_and_fetch
     jobs = await aiohttp_104(links)
@@ -57,4 +61,39 @@ async def get_django_job():
     json_compatible_item_data = jsonable_encoder(res)
     print(f"---------- execute_time: {time.time() - start_time}s ----------")
     return JSONResponse(content=json_compatible_item_data)
+
+
+@app.get("/sync/api/104/django/{page}/")
+def get_jobs(page: int):
+    url = f"https://www.104.com.tw/jobs/search/?ro=0&kwop=7&keyword=django&expansionType=area%2Cspec%2Ccom%2Cjob%2Cwf%2Cwktm&order=15&asc=0&lang=1&page={page}&mode=s&jobsource=2018indexpoc&langFlag=0&langStatus=0&recommendJob=1&hotJob=1"
+    r = requests.get(url)
+    soup = BeautifulSoup(r.text, "html.parser")
+    links_ele = soup.find_all("a", {"class": "js-job-link"}, href=True)
+    links = [prefix + ele["href"] for i, ele in enumerate(links_ele)]
+
+    jobs = []
+    ids = []
+    titles = []
+    contents = []
+    for i, link in enumerate(links):
+        s = 1 + random.random()
+        time.sleep(s)
+        r_link = requests.get(link)
+        if r_link.status_code == 200:
+            try:
+                soup = BeautifulSoup(r_link.text, "html.parser")
+                title = soup.find("h1").text
+                content = soup.find("p", class_="mb-5 r3 job-description__content text-break").text
+                ids.append(i+1)
+                titles.append(title)
+                contents.append(content)
+                jobs.append({"title": title, "content": content})
+            except Exception as e:
+                print(str(e))
+
+    df = pd.DataFrame(data={'id': ids, 'title': titles, 'contents': contents})
+    f_path = f'./out_p{page}.xlsx'
+    df.to_excel(f_path, sheet_name='jobs', engine='openpyxl', index=False)
+
+    return jobs
 

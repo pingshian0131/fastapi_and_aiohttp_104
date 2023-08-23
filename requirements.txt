@@ -1,0 +1,8 @@
+aiohttp
+pydantic
+fastapi
+requests
+bs4
+uvicorn
+pandas
+openpyxl
