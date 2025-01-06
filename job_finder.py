@@ -15,7 +15,7 @@ app = FastAPI()
 def parse_html(html):
     soup = BeautifulSoup(html, "html.parser")
     print(soup)
-    title = soup.find("h1").text
+    title = soup.find("job-header__title")
     content = soup.find("p", class_="mb-5 r3 job-description__content text-break")
     return {"title": title, "content": content}
 
@@ -39,7 +39,7 @@ class Job(BaseModel):
     title: str = Field(title="職稱")
     content: str = Field(title="工作內容")
 
-url = "https://www.104.com.tw/jobs/search/?ro=0&keyword=django&expansionType=area%2Cspec%2Ccom%2Cjob%2Cwf%2Cwktm&order=14&asc=0&page=1&mode=s&jobsource=2018indexpoc&langFlag=0&langStatus=0&recommendJob=1&hotJob=1"
+url = "https://www.104.com.tw/jobs/search/?jobsource=index_s&keyword=django&mode=s&page=1"
 prefix = "https:"
 
 @app.get("/async/api/104/django/1/")
@@ -49,15 +49,18 @@ async def get_django_job():
     # get page1 all_url
     r = requests.get(url)
     soup = BeautifulSoup(r.text, "html.parser")
-    links_ele = soup.find_all("a", {"class": "js-job-link"}, href=True)
-    links = [prefix + ele["href"] for i, ele in enumerate(links_ele)]
+    links_ele = soup.find_all("a", {"class": "jb-link"}, href=True)
+    links = [ele["href"] for i, ele in enumerate(links_ele)]
+    titles = [ele.text for i, ele in enumerate(links_ele)]
+    print(titles)
     print(links)
 
     # start parse_and_fetch
-    jobs = await aiohttp_104(links)
+    # jobs = await aiohttp_104(links)
 
     # make FastAPI return objects
-    res = [Job(title=job.get("title"), content=job.get("content")) for job in jobs]
+    # res = [Job(title=job.get("title"), content=job.get("content")) for job in jobs]
+    res = [Job(title=title, content=link) for title, link in zip(titles, links)]
     json_compatible_item_data = jsonable_encoder(res)
     print(f"---------- execute_time: {time.time() - start_time}s ----------")
     return JSONResponse(content=json_compatible_item_data)
